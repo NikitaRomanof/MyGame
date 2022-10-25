@@ -1,16 +1,12 @@
 package info.andr.game;
-
-import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
-import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
@@ -18,9 +14,9 @@ import com.badlogic.gdx.utils.TimeUtils;
 import com.badlogic.gdx.math.Rectangle;
 import java.util.Iterator;
 
-public class MyGame extends ApplicationAdapter {
+public class MyGame implements Screen {
+	final Drop game;
 	OrthographicCamera camera;
-	SpriteBatch batch;
 	Texture bucketImg;
 	Texture dropImg;
 	Sound dropSound;
@@ -29,37 +25,28 @@ public class MyGame extends ApplicationAdapter {
 	Vector3 touchPos;
 	Array<Rectangle> raindrops;
 	long lastDropTime;
-	BitmapFont win;
-	BitmapFont lose;
 	long winsCount;
 	long loseCount;
-	int level = 1;
-	int stop = 0;
-	
-	@Override
-	public void create () {
+	int level;
+
+	public MyGame (Drop gam, int level) {
+		this.game = gam;
+		this.level = level;
 		camera = new OrthographicCamera();
 		camera.setToOrtho(false, 800, 480);
-		batch = new SpriteBatch();
 		touchPos = new Vector3();
 		initTexture();
 		initSound();
 		initRectangle();
-		initTextCountWinLose();
 		raindrops = new Array<>();
 		spawnRaindrop();
 	}
+
 	private void initTexture() {
 		bucketImg = new Texture("bucket.png");
 		dropImg = new Texture("droplet.png");
 	}
 
-	private void initTextCountWinLose() {
-		win = new BitmapFont();
-		lose = new BitmapFont();
-		win.setColor(Color.GREEN);
-		lose.setColor(Color.RED);
-	}
 
 	private void initSound() {
 		dropSound = Gdx.audio.newSound(Gdx.files.internal("waterdrop.wav"));
@@ -69,8 +56,8 @@ public class MyGame extends ApplicationAdapter {
 	}
 	private void initRectangle() {
 		bucket = new Rectangle();
-		bucket.x = 800 / 2 - 64 / 2;
-		bucket.y = 20;
+		bucket.x = 800.0f / 2 - 64.0f / 2;
+		bucket.y = 20.0f;
 		bucket.width = 64;
 		bucket.height = 64;
 	}
@@ -94,56 +81,46 @@ public class MyGame extends ApplicationAdapter {
 		}
 		if(Gdx.input.isKeyPressed(Input.Keys.LEFT)) bucket.x -= 200 * Gdx.graphics.getDeltaTime() * 4;
 		if(Gdx.input.isKeyPressed(Input.Keys.RIGHT)) bucket.x += 200 * Gdx.graphics.getDeltaTime() * 4;
-
 		if(bucket.x <= 0) bucket.x = 0;
 		if(bucket.x >= 800 - 64) bucket.x = 800 - 64;
 	}
 
 	@Override
-	public void render () {
-		if (stop == 0) {
+	public void render (float delta) {
+
 			Gdx.gl.glClearColor(0, 0, 0.2f, 1);
 			Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 			camera.update();
-			batch.setProjectionMatrix(camera.combined);
-
-			batch.begin();
-			batch.draw(bucketImg, bucket.x, bucket.y);
+			game.batch.setProjectionMatrix(camera.combined);
+		    game.batch.begin();
+		    game.font.setColor(0, 1, 0, 1);
+		    game.font.draw(game.batch, "Drops Collected: " + winsCount, 10, 460);
+		    game.font.setColor(1, 0, 0, 1);
+		    game.font.draw(game.batch, "Drops Missed : " + loseCount, 650, 460);
+		    game.font.setColor(1, 0, 1, 1);
+		    game.font.draw(game.batch, "LEVEL : " + level, 350, 460);
+			game.batch.draw(bucketImg, bucket.x, bucket.y);
 
 			for (Rectangle raindrop : raindrops) {
-				batch.draw(dropImg, raindrop.x, raindrop.y);
+			    game.batch.draw(dropImg, raindrop.x, raindrop.y);
 			}
 
-			if (loseCount <= 10) {
-				if (winsCount == 30) {
-					win.draw(batch, "Congratulations!\n Level " + level + " completed!", 350, 240);
-					stop = 150;
-				} else {
-					win.draw(batch, Long.toString(winsCount), 20, 470);
-					lose.draw(batch, Long.toString(loseCount), 780, 470);
-				}
-
-			} else {
-				lose.draw(batch, "GAME OVER!", 350, 240);
-				rainMusic.stop();
-			}
-
-			if (level == 5) {
-				win.draw(batch, "Congratulations! Yor WIN!", 350, 240);
-				rainMusic.stop();
-			}
-
-			batch.end();
+		    game.batch.end();
 			levelUp();
 			rainDropLogic();
-		} else {
-			--stop;
-		}
-
 	}
 
 	private void levelUp() {
-		if (winsCount == 30) {
+		if (loseCount >= 5) {
+			rainMusic.stop();
+			game.nextLvl(3);
+		}
+		if (level >= 7 && winsCount == 30) {
+			rainMusic.stop();
+			game.nextLvl(2);
+		} else if (winsCount == 30) {
+			rainMusic.stop();
+			game.nextLvl(1);
 			++level;
 			winsCount = 0;
 			loseCount = 0;
@@ -151,40 +128,62 @@ public class MyGame extends ApplicationAdapter {
 	}
 
 	private void rainDropLogic() {
-		if (loseCount <= 10 && level < 5) {
 			controlTouchAndButton();
-			if (TimeUtils.nanoTime() - lastDropTime > 1000000000) spawnRaindrop();
+			if (TimeUtils.nanoTime() - lastDropTime > 600000000) spawnRaindrop();
 			Iterator<Rectangle> iter = raindrops.iterator();
 			while (iter.hasNext()) {
 				Rectangle raindrop = iter.next();
 				raindrop.y -= 200 * Gdx.graphics.getDeltaTime() * level;
-				if (raindrop.y + 64 < 0) iter.remove();
+
 				if(raindrop.overlaps(bucket)) {
 					dropSound.play();
 					iter.remove();
 					++winsCount;
-				}
-				if(raindrop.y <= 0) {
+				} else if (!raindrop.overlaps(bucket) && raindrop.y < 0) {
 					++loseCount;
-					iter.remove();
+					if(raindrops.size > 0) {
+						iter.remove();
+					}
 				}
-				if (loseCount == 10 || winsCount == 30) {
+
+				if (loseCount == 5 || winsCount == 30) {
 					break;
 				}
 			}
-		}
 	}
 	
 	@Override
 	public void dispose () {
-		super.dispose();
 		bucketImg.dispose();
 		dropImg.dispose();
 		dropSound.dispose();
 		rainMusic.dispose();
-		win.dispose();
-		lose.dispose();
-		batch.dispose();
+		game.batch.dispose();
+		game.dispose();
+	}
+
+	@Override
+	public void show() {
+
+	}
+
+	@Override
+	public void resize(int width, int height) {
+
+	}
+
+	@Override
+	public void pause() {
+
+	}
+
+	@Override
+	public void resume() {
+
+	}
+
+	@Override
+	public void hide() {
 
 	}
 }
